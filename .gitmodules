@@ -1,3 +1,4 @@
 [submodule "mariadb"]
 	path = mariadb
 	url = https://github.com/MariaDB/server.git
+	branch = 11.4
