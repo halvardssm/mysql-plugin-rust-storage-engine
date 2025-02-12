@@ -7,3 +7,7 @@ edition = "2021"
 crate-type =["staticlib", "cdylib"]
 
 [dependencies]
+podman-api = "0.10"
+tokio = { version = "1.43.0", features = ["full"] }
+containers-api = "0.9"
+futures-util = "0.3"
