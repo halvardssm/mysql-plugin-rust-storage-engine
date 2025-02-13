@@ -10,7 +10,7 @@ extern int rust_storage_engine_init();
 extern int rust_storage_engine_deinit();
 
 static struct st_mysql_storage_engine crustdb_storage_engine =
-    {(110406 << 8)};
+    {MYSQL_HANDLERTON_INTERFACE_VERSION};
 
 maria_declare_plugin(crustdb){
     MYSQL_STORAGE_ENGINE_PLUGIN, /* int type; the plugin type (a MYSQL_XXX_PLUGIN value)   */
