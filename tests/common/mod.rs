@@ -11,6 +11,34 @@ const IMAGE_NAME: &str = "mariadb";
 const IMAGE_TAG: &str = "11.4";
 const IMAGE: &str = "mariadb:11.4";
 
+pub struct SetupTest {
+    pub id: String,
+    pub container: Container,
+}
+
+impl SetupTest {
+    pub async fn init(id: &str) -> Self{
+        let identifier = format!("mariadb-integration-test-{}", id);
+        let container = container_create_start_and_wait_for_healthy(&identifier).await.unwrap();
+
+        Self {
+            id: identifier,
+            container
+        }
+    }
+  
+    async fn async_drop(&self) {
+        container_remove(&self.id).await.unwrap();
+    }
+}
+
+impl Drop for SetupTest {
+    fn drop(&mut self) {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(self.async_drop());
+    }
+}
+
 fn get_podman() -> Podman {
     Podman::unix("/var/run/docker.sock")
 }
@@ -32,10 +60,7 @@ pub async fn container_create(name: &str) -> Result<ContainerCreateCreatedBody, 
         .images()
         .pull(
             &PullOpts::builder()
-                .reference(format!(
-                    "docker.io/library/{}/{}",
-                    IMAGE_NAME, IMAGE_TAG
-                ))
+                .reference(format!("docker.io/library/{}/{}", IMAGE_NAME, IMAGE_TAG))
                 .build(),
         )
         .map(|report| {
@@ -145,17 +170,16 @@ pub async fn container_exec_copy_plugin(container: &Container) -> Result<(), Box
 }
 
 pub async fn container_create_start_and_wait_for_healthy(
-    name: &str,
+    id: &str,
 ) -> Result<Container, Box<dyn Error>> {
-    let id = format!("mariadb-test-{}", name);
-    println!("Removing existing container: {}", &id);
-    container_remove(&id).await?;
-    println!("Creating container: {}", &id);
-    container_create(&id).await?;
-    println!("Starting container: {}", &id);
-    let container = container_start(&id).await?;
-    println!("Waiting for container to start: {}", &id);
-    container_wait_for_healthy(&id).await?;
+    println!("Removing existing container: {}", id);
+    container_remove(id).await?;
+    println!("Creating container: {}", id);
+    container_create(id).await?;
+    println!("Starting container: {}", id);
+    let container = container_start(id).await?;
+    println!("Waiting for container to start: {}", id);
+    container_wait_for_healthy(id).await?;
 
     container_exec_copy_plugin(&container).await?;
 
