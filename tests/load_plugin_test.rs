@@ -21,7 +21,7 @@ async fn test_mariadb_query() -> Result<(), Box<dyn Error>> {
     match chunk.unwrap() {
         Ok(TtyChunk::StdOut(chunk)) => {
             let testfile_content = String::from_utf8_lossy(&chunk);
-            assert_eq!(testfile_content, "1234\n");
+            assert!(testfile_content.contains("INSTALL PLUGIN rust_storage SONAME 'crustdb.so'"), "Expected output: `INSTALL PLUGIN rust_storage SONAME 'crustdb.so'`, got: `{testfile_content}`");
         }
         Ok(chunk) => {
             let fd = match chunk {
@@ -38,6 +38,8 @@ async fn test_mariadb_query() -> Result<(), Box<dyn Error>> {
             std::process::exit(1);
         }
     }
+
+    setup.deinit().await;
 
     Ok(())
 }

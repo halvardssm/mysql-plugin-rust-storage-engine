@@ -17,27 +17,29 @@ pub struct SetupTest {
 }
 
 impl SetupTest {
-    pub async fn init(id: &str) -> Self{
+    pub async fn init(id: &str) -> Self {
         let identifier = format!("mariadb-integration-test-{}", id);
-        let container = container_create_start_and_wait_for_healthy(&identifier).await.unwrap();
+        let container = container_create_start_and_wait_for_healthy(&identifier)
+            .await
+            .unwrap();
 
         Self {
             id: identifier,
-            container
+            container,
         }
     }
-  
-    async fn async_drop(&self) {
-        container_remove(&self.id).await.unwrap();
+
+    pub async fn deinit(&self) {
+        let _ = container_remove(&self.id).await;
     }
 }
 
-impl Drop for SetupTest {
-    fn drop(&mut self) {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(self.async_drop());
-    }
-}
+// impl Drop for SetupTest {
+//     fn drop(&mut self) {
+//         let rt = tokio::runtime::Runtime::new().unwrap();
+//         rt.block_on(self.async_drop());
+//     }
+// }
 
 fn get_podman() -> Podman {
     Podman::unix("/var/run/docker.sock")
@@ -130,7 +132,16 @@ pub async fn container_wait_for_healthy(id: &str) -> Result<Container, Box<dyn E
 
     loop {
         let res = container.healthcheck().await?;
-        println!("Healthcheck for container: {}: {:?}", id, res);
+
+        if res.log.is_none() {
+            println!("Healthcheck for container: {} - {:?}", id, res.status);
+        } else {
+            println!(
+                "Healthcheck for container: {} - {:?} - {:?}",
+                id, res.status, res.log
+            );
+        }
+
         if res.status == Some("healthy".to_string()) {
             break;
         }
