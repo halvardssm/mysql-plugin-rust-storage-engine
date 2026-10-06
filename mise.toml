@@ -12,13 +12,14 @@ run = "mise tasks"
 
 [tasks.init]
 description = "Initialize the project (checkout submodules, build mariadb and generate headers)"
-depends_post = ["build-mariadb"]
+depends_post = ["build:mariadb"]
 run = '''
 git submodule update --init --recursive
 [ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
 '''
+sources = ["mariadb"]
 
-[tasks.build-mariadb]
+[tasks."build:mariadb"]
 description = "Build MariaDB and generate headers"
 run = '''
 [ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
@@ -26,7 +27,7 @@ run = '''
 "$CONTAINER_CMD" run -v "$PWD":/code -t mariadb-server-build cmake . -DCMAKE_BUILD_TYPE=Debug -DMYSQL_MAINTAINER_MODE=OFF
 '''
 
-[tasks.build-cargo-debug]
+[tasks."build:cargo:debug"]
 description = "Build the rust library in debug mode inside a container"
 sources = ["Cargo.toml", "Cargo.lock", "src/**/*.rs"]
 outputs = ["target/debug/{{ env.LIB_NAME }}.a"]
@@ -35,7 +36,7 @@ run = '''
 "$CONTAINER_CMD" run --rm -v "$PWD":/code -w /code -t rust:latest cargo build
 '''
 
-[tasks.build-cargo-release]
+[tasks."build:cargo:release"]
 description = "Build the rust library in release mode inside a container"
 sources = ["Cargo.toml", "Cargo.lock", "src/**/*.rs"]
 outputs = ["target/release/{{ env.LIB_NAME }}.a"]
@@ -44,9 +45,9 @@ run = '''
 "$CONTAINER_CMD" run --rm -v "$PWD":/code -w /code -t rust:latest cargo build --release
 '''
 
-[tasks.build-gcc-debug]
+[tasks."build:gcc:debug"]
 description = "Link the debug plugin into target/plugin"
-depends = ["build-cargo-debug"]
+depends = ["build:cargo:debug"]
 run = '''
 [ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
 mkdir -p target/plugin
@@ -56,9 +57,9 @@ mkdir -p target/plugin
     -lpthread -ldl
 '''
 
-[tasks.build-gcc-release]
+[tasks."build:gcc:release"]
 description = "Link the release plugin into target/plugin"
-depends = ["build-cargo-release"]
+depends = ["build:cargo:release"]
 run = '''
 [ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
 mkdir -p target/plugin
@@ -70,15 +71,15 @@ mkdir -p target/plugin
 
 [tasks.build]
 description = "Build the plugin in debug mode and outputs to target/plugin"
-depends = ["build-gcc-debug"]
+depends = ["build:gcc:debug"]
 
 [tasks.cargo-test]
 description = "Build the plugin and run the tests"
 alias = "test"
-depends = ["build-gcc-debug"]
+depends = ["build:gcc:debug"]
 run = "cargo test -- --nocapture"
 
-[tasks.mariadb-clean]
+[tasks."clean:mariadb"]
 description = "Remove all untracked files in mariadb, including build artifacts"
 dir = "mariadb"
 run = '''
