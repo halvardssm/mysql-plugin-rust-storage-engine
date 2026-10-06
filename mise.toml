@@ -1,0 +1,87 @@
+[tools]
+rust = "latest"
+
+[env]
+LIB_NAME = "libcrustdb"
+# Prefer podman, fall back to docker; empty when neither is installed.
+CONTAINER_CMD = "{{ exec(command='command -v podman || command -v docker || true') }}"
+
+[tasks.help]
+description = "Show this help message"
+run = "mise tasks"
+
+[tasks.init]
+description = "Initialize the project (checkout submodules, build mariadb and generate headers)"
+depends_post = ["build-mariadb"]
+run = '''
+git submodule update --init --recursive
+[ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
+'''
+
+[tasks.build-mariadb]
+description = "Build MariaDB and generate headers"
+run = '''
+[ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
+"$CONTAINER_CMD" build -t mariadb-server-build -f oci/mariadb-builder.containerfile oci
+"$CONTAINER_CMD" run -v "$PWD":/code -t mariadb-server-build cmake . -DCMAKE_BUILD_TYPE=Debug -DMYSQL_MAINTAINER_MODE=OFF
+'''
+
+[tasks.build-cargo-debug]
+description = "Build the rust library in debug mode inside a container"
+sources = ["Cargo.toml", "Cargo.lock", "src/**/*.rs"]
+outputs = ["target/debug/{{ env.LIB_NAME }}.a"]
+run = '''
+[ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
+"$CONTAINER_CMD" run --rm -v "$PWD":/code -w /code -t rust:latest cargo build
+'''
+
+[tasks.build-cargo-release]
+description = "Build the rust library in release mode inside a container"
+sources = ["Cargo.toml", "Cargo.lock", "src/**/*.rs"]
+outputs = ["target/release/{{ env.LIB_NAME }}.a"]
+run = '''
+[ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
+"$CONTAINER_CMD" run --rm -v "$PWD":/code -w /code -t rust:latest cargo build --release
+'''
+
+[tasks.build-gcc-debug]
+description = "Link the debug plugin into target/plugin"
+depends = ["build-cargo-debug"]
+run = '''
+[ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
+mkdir -p target/plugin
+"$CONTAINER_CMD" run --rm -v "$PWD":/code -w /code -t rust:latest gcc -DMYSQL_DYNAMIC_PLUGIN -DMYSQL_ABI_CHECK -fpic -shared \
+    -o "target/plugin/$LIB_NAME.so" -I mariadb/include -w src/cpp/plugin.c \
+    "target/debug/$LIB_NAME.a" \
+    -lpthread -ldl
+'''
+
+[tasks.build-gcc-release]
+description = "Link the release plugin into target/plugin"
+depends = ["build-cargo-release"]
+run = '''
+[ -n "$CONTAINER_CMD" ] || { echo "Error: Neither podman nor docker is available"; exit 1; }
+mkdir -p target/plugin
+"$CONTAINER_CMD" run --rm -v "$PWD":/code -w /code -t rust:latest gcc -DMYSQL_DYNAMIC_PLUGIN -DMYSQL_ABI_CHECK -fpic -shared \
+    -o "target/plugin/$LIB_NAME.so" -I mariadb/include -w src/cpp/plugin.c \
+    "target/release/$LIB_NAME.a" \
+    -lpthread -ldl
+'''
+
+[tasks.build]
+description = "Build the plugin in debug mode and outputs to target/plugin"
+depends = ["build-gcc-debug"]
+
+[tasks.cargo-test]
+description = "Build the plugin and run the tests"
+alias = "test"
+depends = ["build-gcc-debug"]
+run = "cargo test -- --nocapture"
+
+[tasks.mariadb-clean]
+description = "Remove all untracked files in mariadb, including build artifacts"
+dir = "mariadb"
+run = '''
+git clean -xffd
+git submodule foreach --recursive git clean -xffd
+'''
